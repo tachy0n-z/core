@@ -1,0 +1,71 @@
+{
+  "name": "core",
+  "tree": {
+    "$className": "DataModel",
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "$path": "src/client/scripts"
+      }
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Client": {
+        "$className": "Folder",
+        "Services": {
+          "$path": "src/client/services"
+        },
+        "UI": {
+          "$path": "src/client/ui"
+        }
+      },
+      "Shared": {
+        "$className": "Folder",
+        "Services": {
+          "$path": "src/shared/services"
+        },
+        "Helpers": {
+          "$path": "src/shared/helpers"
+        },
+        "Assets": {
+          "$path": "src/shared/assets",
+          "$ignoreUnknownInstances": true
+        },
+        "Adapters": {
+          "$path": "src/shared/adapters"
+        },
+        "Types": {
+          "$path": "src/types"
+        },
+        "Enums": {
+          "$path": "src/enums"
+        }
+      },
+      "Packages": {
+        "$path": "Packages"
+      },
+      "Config": {
+        "$path": "src/config"
+      }
+    },
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Services": {
+        "$path": "src/server/services"
+      },
+      "Helpers": {
+        "$path": "src/server/helpers"
+      },
+      "Scripts": {
+        "$path": "src/server/scripts"
+      }
+    },
+    "ServerStorage": {
+      "$className": "ServerStorage",
+      "Assets": {
+        "$path": "src/server/assets"
+      }
+    }
+  }
+}

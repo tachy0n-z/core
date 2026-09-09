@@ -1,0 +1,21 @@
+[package]
+name = "tachy0n-z/core"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+
+# Data
+ProfileStore = "2jammers/profilestore@0.1.0"
+TableUtil = "sleitnick/table-util@1.2.1"
+
+# Lifecycle
+Trove = "sleitnick/trove@^1.8.0"
+
+# UI
+ReactRoblox = "jsdotlua/react-roblox@17.2.1"
+TopbarPlus = "1foreverhd/topbarplus@^3.4.0"
+Satchel = "ryanlua/satchel@1.4.1"
+Ripple = "littensy/ripple@^0.10.1"
+React = "jsdotlua/react@17.2.1"

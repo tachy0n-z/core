@@ -1,0 +1,13 @@
+# Roblox extensions
+./*.rbxl
+./*.rbxm
+./*.rbxmx
+
+# Config and packages
+wally.lock
+sourcemap.json
+Packages/*
+
+# Extra stuff
+*.ini
+*.log
