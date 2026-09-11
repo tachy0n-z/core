@@ -7,6 +7,7 @@ local Types = script:FindFirstAncestor("Types")
 
 -- Modules
 local TableUtil = require(ReplicatedStorage.Packages.TableUtil)
+local ValueWrap = require(Types.Data.Wraps.ValueWrap)
 local Signal = require(Types.Core.Signal)
 local Pretty = require(ReplicatedStorage.Shared.Helpers.Pretty)
 local Type = require(Types.Core.Type)
@@ -29,6 +30,7 @@ export type Record<T = {}> = Type.Type<T & {
 
     -- Methods
     Unwrap: <K, V>(self: Record<T>, obj: {[K]: V}?) -> {[K]: V},
+    Track: (self: Record<T>, path: RecordPath) -> (ValueWrap.ValueWrap<any>, Signal.Signal<any?, any?>),
     Apply: (self: Record<T>, path: RecordPath, value: any?) -> (boolean, string?),
     Get: (self: Record<T>, path: RecordPath) -> any?
 }>
@@ -90,6 +92,21 @@ function RecordMethods.Unwrap(self: Record, obj: {[any]: any}?): {[any]: any}
 
     -- Just a plain table
     return target
+end
+
+-- Constructs and returns a ValueWrap that tracks the value at the given path.
+function RecordMethods.Track(self: Record, path: RecordPath): (ValueWrap.ValueWrap<any>, Signal.Signal<any?, any?>)
+    local wrap = ValueWrap.new(self:Get(path))
+    local signal = self:GetChangedSignalAtPath(path)
+    signal:Connect(function(new: any?, old: any?): ()
+        wrap:Set(new)
+    end)
+    wrap.Destroying:Once(function(): ()
+        if not signal:IsDestroyed() then
+            signal:Destroy()
+        end
+    end)
+    return wrap, signal
 end
 
 -- Returns the raw table, optionally without copying it.
