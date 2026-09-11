@@ -101,7 +101,7 @@ function AdapterMethods.Transform(self: Adapter, instance: Instance): any?
         return Pretty.Error(`failed to transform {instance:GetFullName()}: {result}`,
             nil, `{self._typeName}.Transform`)
     elseif result == nil then
-        return Pretty.Warn(`transform returned nil for {instance:GetFullName()}`,
+        return Pretty.Debug(`transform returned nil for {instance:GetFullName()}`,
             nil, `{self._typeName}.Transform`)
     end
 
@@ -115,7 +115,7 @@ end
 function AdapterMethods.Release(self: Adapter, instance: Instance): ()
     local existing = self._cache[instance]
     if existing == nil then
-        return Pretty.Warn(`attempted to release {instance:GetFullName()} but it is not in cache`,
+        return Pretty.Debug(`attempted to release {instance:GetFullName()} but it is not in cache`,
             nil, `{self._typeName}.Release`)
     end
     if self._release ~= nil then
