@@ -9,6 +9,20 @@
         "$path": "src/client/scripts"
       }
     },
+    "Workspace": {
+      "$className": "Workspace",
+      "Objects": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true
+      },
+      "$ignoreUnknownInstances": true
+    },
+    "StarterGui": {
+      "$className": "StarterGui",
+      "$properties": {
+        "ScreenOrientation": "LandscapeSensor"
+      }
+    },
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Client": {
@@ -29,8 +43,7 @@
           "$path": "src/shared/helpers"
         },
         "Assets": {
-          "$path": "src/shared/assets",
-          "$ignoreUnknownInstances": true
+          "$path": "src/shared/assets"
         },
         "Adapters": {
           "$path": "src/shared/adapters"
