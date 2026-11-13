@@ -44,7 +44,8 @@ function DefinitionClass.newValueFactory<T>(witness: T): (() -> T) & ((T) -> T?)
     return function(...: any): any
         local args = {...}
         local count = select("#", ...)
-        local default = count > 0 and args[1] or nil
+        -- Not `and/or`, which would turn a `false` default into no default
+        local default = if count > 0 then args[1] else nil
         return f{
             TypeName = typeof(witness),
             Nullable = count > 0 and args[1] == nil,

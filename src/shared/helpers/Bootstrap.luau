@@ -32,15 +32,31 @@ local function newAttempt<T>(start: number?, successful: {T}?, failures: {T}?, e
     })
 end
 
+-- Fails any unfinished services that depend upon a failed service.
+local function failDependants(services: {any}, successful: {any}, failures: {any}, errors: {[any]: string}): ()
+    for _, service in ipairs(services) do
+        if table.find(successful, service) ~= nil or table.find(failures, service) ~= nil then
+            continue
+        end
+        for _, failure in ipairs(failures) do
+            if service:HasDependency(failure) then
+                errors[service] = `dependency '{failure.Name}' failed`
+                table.insert(failures, service)
+                break
+            end
+        end
+    end
+end
+
 local Bootstrap = {}
 
--- Requires all children under the given instance(s) and returns a list of successful and failed requires.
-function Bootstrap.RequireAll(ignore: {Instance}, ...: Folder): ({Types.Service}, {string})
+-- Requires all children under the given instance(s) and returns a list of successful and failed requires, plus failure reasons.
+function Bootstrap.RequireAll(ignore: {Instance}, ...: Folder): ({Types.Service}, {string}, {[string]: string})
     local folders = {...}
     if #folders == 0 then
-        return {}, {}
+        return {}, {}, {}
     end
-    local successful, failures = {}, {}
+    local successful, failures, errors = {}, {}, {}
     for _, folder in ipairs(folders) do
         for _, child in ipairs(folder:GetChildren()) do
             if table.find(ignore, child) ~= nil then
@@ -49,14 +65,16 @@ function Bootstrap.RequireAll(ignore: {Instance}, ...: Folder): ({Types.Service}
             local success, resp = pcall(require, child)
             if not success then
                 table.insert(failures, child.Name)
+                errors[child.Name] = tostring(resp)
             elseif not Types.Is(resp) or not resp:IsA("Service") then
                 table.insert(failures, child.Name)
+                errors[child.Name] = "did not return a Service"
             else
                 table.insert(successful, resp)
             end
         end
     end
-    return successful, failures
+    return successful, failures, errors
 end
 
 -- Initialises a list of services, returning an attempt object with the results.
@@ -90,9 +108,10 @@ function Bootstrap.InitialiseAll(timeout: number, ...: Types.Service<any>): Atte
         end)
     end
     
-    -- Wait for completion
+    -- Wait for completion, failing early any services whose dependencies failed
     repeat
         RunService.Heartbeat:Wait()
+        failDependants(services, successful, failures, errors)
     until
         #successful + #failures == #services or
         os.clock() - now > timeout

@@ -41,6 +41,18 @@ export type Library<T = any> = Type.Type<{
 }>
 local LibraryMethods = Type.methods("Library", {} :: Library)
 
+-- Safely runs the user-defined loader for the given child, returning nil on failure.
+local function tryLoad(self: Library, child: Instance, funcName: string): any?
+    local success, value = pcall(self._load, child, self)
+    if success and value ~= nil then
+        return value
+    end
+    local reason = if success then "" else `: {value}`
+    Pretty.Warn(`failed to load '{child:GetFullName()}'{reason}`,
+        nil, `{self._typeName}.{funcName}`)
+    return nil
+end
+
 function LibraryMethods.GetLastBound(self: Library): Instance?
     return self._lastBound
 end
@@ -51,7 +63,6 @@ end
 
 function LibraryMethods.Bind(self: Library, obj: Instance): number
     -- Clear prior data
-    self._lastBound = self._bound
     self:Unbind()
 
     -- Bind to new object
@@ -63,14 +74,11 @@ function LibraryMethods.Bind(self: Library, obj: Instance): number
                 nil, `{self._typeName}.Bind`)
             return
         end
-        local value = self._load(child, self)
+        local value = tryLoad(self, child, "Bind")
         if value ~= nil then
             self._cache[child.Name] = value
             self.Changed:Fire(child.Name, value)
             successful += 1
-        else
-            Pretty.Warn(`failed to load '{child.Name}' from '{obj:GetFullName()}'`,
-                nil, `{self._typeName}.Bind`)
         end
     end
     for _, child in ipairs(obj:GetChildren()) do
@@ -93,6 +101,7 @@ function LibraryMethods.Unbind(self: Library): ()
     end
     table.clear(self._cache)
     self._trove:Clean()
+    self._lastBound = self._bound or self._lastBound
     self._bound = nil
 end
 
@@ -130,7 +139,6 @@ export type StaticLibrary<T = any> = Library<T> & {
 local StaticLibraryMethods = Type.methods("StaticLibrary", {} :: StaticLibrary, LibraryMethods)
 
 function StaticLibraryMethods.Bind(self: Library, obj: Instance): number
-    self._lastBound = self._bound
     self:Unbind()
     self._bound = obj
     return 0
@@ -145,14 +153,11 @@ function StaticLibraryMethods.Populate(self: StaticLibrary): number
     local successful = 0
     for _, child in ipairs(self._bound:GetChildren()) do
         if self._cache[child.Name] == nil then
-            local value = self._load(child, self)
+            local value = tryLoad(self, child, "Populate")
             if value ~= nil then
                 self._cache[child.Name] = value
                 self.Changed:Fire(child.Name, value)
                 successful += 1
-            else
-                Pretty.Warn(`failed to load '{child.Name}' from '{self._bound:GetFullName()}'`,
-                    nil, `{self._typeName}.Populate`)
             end
         end
     end
@@ -167,7 +172,6 @@ local LazyLibraryMethods = Type.methods("LazyLibrary", {} :: LazyLibrary, Librar
 
 function LazyLibraryMethods.Bind(self: LazyLibrary, obj: Instance): number
     -- Clear prior data
-    self._lastBound = self._bound
     self:Unbind()
 
     -- Bind to new object
@@ -189,14 +193,11 @@ function LazyLibraryMethods.Get(self: LazyLibrary, key: string, default: any?): 
     if v == nil and self._bound then
         local child = self._bound:FindFirstChild(key)
         if child then
-            v = self._load(child, self)
+            v = tryLoad(self, child, "Get")
             if v ~= nil then
                 self._cache[key] = v
                 self.Changed:Fire(key, v)
                 return v
-            else
-                Pretty.Warn(`failed to load '{child.Name}' from '{self._bound:GetFullName()}'`,
-                    nil, `{self._typeName}.Get`)
             end
         end
     end

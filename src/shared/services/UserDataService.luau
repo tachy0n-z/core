@@ -20,7 +20,8 @@ local pull = Net.RemoteFunction("Pull", script)
 local READY_DEBOUNCE = 1
 local PULL_DEBOUNCE_SERVER = .1
 local PULL_DEBOUNCE_CLIENT = .5
-local PULL_RETRIES = 30
+local PULL_COOLDOWN = 5
+local PULL_RETRIES = -1 -- Until answered; the server kicks if loading fails
 
 -- References
 local localPlayer = Players.LocalPlayer
@@ -29,6 +30,7 @@ type UserDataService = Types.Service<{
     -- Private data
     _storage: {[Player]: Types.UserDataRecord},
     _locked: {[Player]: boolean},
+    _pulled: {[Player]: number},
 
     -- Events
     Added: Types.Signal<Player>,
@@ -51,6 +53,7 @@ local UserDataService: UserDataService = {
     -- Private data
     _storage = {},
     _locked = {},
+    _pulled = {},
 
     -- Events
     Added = Types.Signal.new(),
@@ -97,9 +100,8 @@ function UserDataService:Register(player: Player, data: any): ()
         self._locked[player] = true
         connections = {
             record.Changed:Connect(function(path: {any}, new: any?): ()
-                if self._locked[player] then
-                    return Pretty.Debug(`attempt to push data for '{player.Name}' at path '{table.concat(Pretty.Stringify(path), ".")}' but locked`,
-                        script, "Register")
+                if not self._pulled[player] then
+                    return -- Their snapshot will include this
                 end
                 push:FireClient(player, path, new)
             end)
@@ -139,6 +141,7 @@ function UserDataService:Clear(player: Player): ()
             script, "Clear")
     end
     self._locked[player] = nil
+    self._pulled[player] = nil
     self.Removing:Fire(player)
     self._storage[player] = nil
 end
@@ -184,10 +187,15 @@ function UserDataService._initialise(self: UserDataService): boolean
         -- Setup pull and ready
         pull.OnServerInvoke = Debounce.PerPlayerFunction(function(player: Player): any?
             local record = self._storage[player]
+            local last = self._pulled[player]
             if not record then
                 return Pretty.Debug(`'{player.Name}' attempted to pull their data but not registered`,
                     script, "_initialise")
+            elseif last and os.clock() - last < PULL_COOLDOWN then
+                return Pretty.Debug(`'{player.Name}' attempted to pull their data too often`,
+                    script, "_initialise")
             end
+            self._pulled[player] = os.clock()
             return record:Raw()
         end, PULL_DEBOUNCE_SERVER)
         self._trove:Add(Debounce.PerPlayerEvent(ready.OnServerEvent, function(player: Player): ()
@@ -215,6 +223,7 @@ function UserDataService._cleanup(self: UserDataService): ()
     end
     table.clear(self._storage)
     table.clear(self._locked)
+    table.clear(self._pulled)
 end
 
 return Types.Service.new(script, UserDataService)

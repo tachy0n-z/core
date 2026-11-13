@@ -15,12 +15,19 @@ local Signal = require(Types.Core.Signal)
 local Trove = require(ReplicatedStorage.Packages.Trove)
 local Type = require(Types.Core.Type)
 
+-- A transform in progress, and whether its instance was released in the meantime.
+type Pending = {
+    Thread: thread,
+    Released: boolean
+}
+
 export type Adapter<I = Instance, O = any, P = any, T = {}> = Type.Type<T & {
     -- Private data
     _allowedClasses: {string},
     _trove: typeof(Trove.new()),
     _cache: {[I]: O},
     _reverse: {[any]: {[I]: true}},
+    _pending: {[I]: Pending},
 
     -- Public data
     Tag: string,
@@ -60,6 +67,15 @@ export type Adapter<I = Instance, O = any, P = any, T = {}> = Type.Type<T & {
 }>
 local AdapterMethods = Type.methods("Adapter", {} :: Adapter)
 
+-- Returns the transform in progress for the given instance, ignoring any whose thread has died.
+local function getPending(self: Adapter, instance: Instance): Pending?
+    local pending = self._pending[instance]
+    if pending and coroutine.status(pending.Thread) ~= "dead" then
+        return pending
+    end
+    return nil
+end
+
 function AdapterMethods:_addReverse(instance: Instance, state: any): ()
     local reverse: {[any]: {[Instance]: true}} = self._reverse :: any
     local bucket = reverse[state]
@@ -89,19 +105,46 @@ function AdapterMethods.Transform(self: Adapter, instance: Instance): any?
             nil, `{self._typeName}.Transform`)
     end
 
+    -- Is it on its way? If so, wait for it (asking for it again, in case it was released)
+    local pending = getPending(self, instance)
+    if pending then
+        pending.Released = false
+        repeat
+            RunService.Heartbeat:Wait()
+        until self._pending[instance] ~= pending or getPending(self, instance) == nil
+        if self._pending[instance] ~= pending then
+            return self._cache[instance]
+        end
+    end
+
     -- Is it here?
     local existing = self._cache[instance]
     if existing ~= nil then
         return existing
     end
 
-    -- Transform it
+    -- Transform it, noting whether it was released in the meantime
+    local job: Pending = { Thread = coroutine.running(), Released = false }
+    self._pending[instance] = job
     local success, result = pcall(self._transform, instance)
+    if self._pending[instance] == job then
+        self._pending[instance] = nil
+    end
     if not success then
         return Pretty.Error(`failed to transform {instance:GetFullName()}: {result}`,
             nil, `{self._typeName}.Transform`)
     elseif result == nil then
         return Pretty.Debug(`transform returned nil for {instance:GetFullName()}`,
+            nil, `{self._typeName}.Transform`)
+    elseif job.Released then
+        if self._release ~= nil then
+            local success, err: string? = pcall(self._release, instance, result)
+            if not success then
+                Pretty.Warn(`failed to release {instance:GetFullName()}: {err}`,
+                    nil, `{self._typeName}.Transform`)
+            end
+        end
+        return Pretty.Debug(`{instance:GetFullName()} was released whilst transforming`,
             nil, `{self._typeName}.Transform`)
     end
 
@@ -113,6 +156,12 @@ function AdapterMethods.Transform(self: Adapter, instance: Instance): any?
 end
 
 function AdapterMethods.Release(self: Adapter, instance: Instance): ()
+    local pending = getPending(self, instance)
+    if pending then
+        pending.Released = true
+        return
+    end
+    self._pending[instance] = nil
     local existing = self._cache[instance]
     if existing == nil then
         return Pretty.Debug(`attempted to release {instance:GetFullName()} but it is not in cache`,
@@ -139,8 +188,8 @@ function AdapterMethods.Install(self: Adapter, instance: Instance, params: any):
 
     -- Check if existing
     local existing = self._cache[instance]
-    if existing ~= nil then
-        return Pretty.Warn(`attempted to install {instance:GetFullName()} but it is already in cache`,
+    if existing ~= nil or getPending(self, instance) then
+        return Pretty.Warn(`attempted to install {instance:GetFullName()} but it is already in cache or being transformed`,
             nil, `{self._typeName}.Install`)
     elseif not self._install then
         return Pretty.Warn(`'{self.Tag}' Adapter does not support installation`,
@@ -218,6 +267,9 @@ function AdapterMethods._destroy(self: Adapter): ()
     for instance in pairs(TableUtil.Copy(self._cache)) do
         self:Release(instance)
     end
+    for instance in pairs(self._pending) do
+        self:Release(instance)
+    end
     self._trove:Destroy()
     self.Added:Destroy()
     self.Removing:Destroy()
@@ -242,6 +294,7 @@ function AdapterClass.new<T>(
         _trove = Trove.new(),
         _cache = {},
         _reverse = {},
+        _pending = {},
 
         -- Public data
         Tag = source.Name,

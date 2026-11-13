@@ -9,18 +9,12 @@ local React = require(ReplicatedStorage.Packages.React)
 local Net = require(ReplicatedStorage.Shared.Helpers.Net)
 
 return function(name: string): (...any) -> any
-    local remote = React.useMemo(function(): RemoteFunction?
+    return React.useCallback(function(...: any): any
         if RunService:IsRunning() or RunService:IsRunMode() then
-            return Net.RemoteFunction(name)
-        end
-        return nil
-    end, { name })
-    return function(...: any): any
-        if remote then
-            return remote:InvokeServer(...)
+            return Net.RemoteFunction(name):InvokeServer(...)
         else
-            return Pretty.Print(`{name}:InvokeServer({table.concat({...}, ", ")})`,
+            return Pretty.Print(`{name}:InvokeServer({table.concat(Pretty.Stringify({...}), ", ")})`,
                 script)
         end
-    end
+    end, { name })
 end

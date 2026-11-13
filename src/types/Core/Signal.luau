@@ -113,10 +113,8 @@ function SignalMethods.Wait(self: Signal): (...any)
     connection = self:Connect(function(...: any): ()
         if connection.Connected then
             connection:Disconnect()
-            local success = coroutine.resume(thread, ...)
-            if not success then
-                Pretty.Warn(`error while resuming thread`,
-                    nil, `{self._typeName}.Wait`)
+            if coroutine.status(thread) == "suspended" then
+                task.spawn(thread, ...)
             end
         end
     end)

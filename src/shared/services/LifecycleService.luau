@@ -14,7 +14,7 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local f = table.freeze
 
 -- Constants
-local TIMEOUT = 30
+local TIMEOUT = RunService:IsServer() and 30 or 180 -- Clients may wait on ProfileStore for their data
 
 type LifecycleService = Types.Service<{
     -- Data
@@ -33,21 +33,23 @@ local LifecycleService: LifecycleService = {
 
 function LifecycleService._initialise(self: LifecycleService): boolean
     -- Attempt require
-    local services, failed = Bootstrap.RequireAll({ script }, table.unpack(self.Targets))
+    local services, failed, reasons = Bootstrap.RequireAll({ script }, table.unpack(self.Targets))
     if next(failed) ~= nil then
-        Pretty.Warn(`failed to require Service(s): {table.concat(failed, ", ")}`,
-            script, "_initialise")
+        for _, name in ipairs(failed) do
+            Pretty.Warn(`failed to require Service '{name}': {reasons[name]}`,
+                script, "_initialise")
+        end
         return false
     end
 
-    -- Attempt initialise
+    -- Attempt initialise, cleaning up any that succeeded if others failed
     local attempt = Bootstrap.InitialiseAll(TIMEOUT, table.unpack(services))
     if next(attempt.Failures) ~= nil then
-        local names = TableUtil.Map(attempt.Failures, function(service: any): string
-            return service.Name
-        end)
-        Pretty.Warn(`failed to initialise Service(s): {table.concat(names, ", ")}`,
-            script, "_initialise")
+        for _, service in ipairs(attempt.Failures) do
+            Pretty.Warn(`failed to initialise Service '{service.Name}': {attempt.Errors[service] or "returned false"}`,
+                script, "_initialise")
+        end
+        Bootstrap.CleanupAll(TIMEOUT, table.unpack(attempt.Successful))
         return false
     end
 

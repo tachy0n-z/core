@@ -7,45 +7,44 @@ local RunService = game:GetService("RunService")
 -- Modules
 local React = require(ReplicatedStorage.Packages.React)
 
+-- State
+local globalSounds: {[string]: Sound} = {}
+
 return function(soundId: string, volume: number?, pitch: number?, global: boolean?): { Play: (any) -> () }
     local soundRef = React.useRef(nil :: Sound?)
     local isGlobal = global == true
 
-    -- Create sound if it doesn't exist
-    if not soundRef.current then
-        if isGlobal then
-            local existing = script:FindFirstChild(soundId)
-            if existing and existing:IsA("Sound") then
-                soundRef.current = existing
-            else
-                local sound = Instance.new("Sound")
-                sound.Name = soundId
-                sound.Parent = script
-                soundRef.current = sound
-            end
+    -- Create sound (or reuse the shared one if global), before any effect can play it
+    React.useLayoutEffect(function(): () -> ()
+        local existing = if isGlobal then globalSounds[soundId] else nil
+        local sound: Sound
+        if existing then
+            sound = existing
         else
-            local sound = Instance.new("Sound")
-            sound.Name = soundId
-            sound.Parent = script
-            soundRef.current = sound
-        end
-    end
-
-    -- Update sound properties when they change
-    React.useEffect(function(): () -> ()
-        local sound = soundRef.current
-        if sound then
+            sound = Instance.new("Sound")
             sound.Name = soundId
             sound.SoundId = soundId
-            sound.Volume = volume or 1
-            sound.PlaybackSpeed = pitch or 1
+            sound.Parent = script
+            if isGlobal then
+                globalSounds[soundId] = sound
+            end
         end
+        soundRef.current = sound
 
         return function(): ()
-            if not isGlobal and soundRef.current then
-                soundRef.current:Destroy()
-                soundRef.current = nil
+            soundRef.current = nil
+            if not isGlobal then
+                sound:Destroy()
             end
+        end
+    end, { soundId, isGlobal } :: {any})
+
+    -- Update sound properties when they change
+    React.useLayoutEffect(function(): ()
+        local sound = soundRef.current
+        if sound then
+            sound.Volume = volume or 1
+            sound.PlaybackSpeed = pitch or 1
         end
     end, { soundId, volume, pitch, isGlobal } :: {any})
 

@@ -1,6 +1,7 @@
 
 -- Services
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 -- Modules
 local React = require(ReplicatedStorage.Packages.React)
@@ -41,6 +42,6 @@ return function(record: Types.Record<any>?, path: {any}): any?
         end
         setState(nil)
         return nil
-    end, { record, path } :: {any})
+    end, { record, HttpService:JSONEncode(path) } :: {any})
     return state
 end

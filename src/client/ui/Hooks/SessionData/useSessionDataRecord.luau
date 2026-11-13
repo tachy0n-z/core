@@ -17,13 +17,12 @@ local useService = require(ReplicatedStorage.Client.UI.Hooks.Control.useService)
 local localPlayer = Players.LocalPlayer
 
 return function(player: Player?): Types.SessionDataRecord?
-    if player == nil or player == localPlayer then
-        return React.useContext(SessionDataContext)
-    end
+    local isLocal = player == nil or player == localPlayer
+    local context = React.useContext(SessionDataContext)
     local sessionDataService = useService(SessionDataService)
     local session, setSession = React.useState(nil :: any?)
     React.useEffect(function(): (() -> ())?
-        if not sessionDataService then
+        if isLocal or not sessionDataService then
             setSession(nil)
             return
         end
@@ -44,5 +43,5 @@ return function(player: Player?): Types.SessionDataRecord?
             Connect.Disconnect(conns, true)
         end
     end, { sessionDataService, player } :: {any})
-    return session
+    return if isLocal then context else session
 end

@@ -90,6 +90,14 @@ end
 
 -- Reflects the current values and any future changes to this record the given instance via attributes.
 function SessionDataRecordMethods.ReflectTo(self: SessionDataRecord, instance: Instance): Signal.Connection
+    local function set(path: {any}, value: any): ()
+        local attribute = self:ConstructAttribute(path)
+        local success, err: string? = pcall(instance.SetAttribute, instance, attribute, value)
+        if not success then
+            Pretty.Warn(`failed to reflect '{attribute}' to '{instance:GetFullName()}': {err}`,
+                script, "ReflectTo")
+        end
+    end
     local function apply(path: {any}, value: any): ()
         if self:IsBlockedPath(path) then
             return
@@ -99,34 +107,48 @@ function SessionDataRecordMethods.ReflectTo(self: SessionDataRecord, instance: I
                 apply(TableUtil.Extend(path, { key }), subValue)
             end
         elseif ALLOWED_TYPES[typeof(value)] then
-            local attribute = self:ConstructAttribute(path)
-            instance:SetAttribute(attribute, value)
+            set(path, value)
         else
             Pretty.Debug(`skipping key of type '{typeof(value)}' for '{instance:GetFullName()}' (incompatible with attributes)`,
                 script, "ReflectTo")
         end
     end
-    apply({}, self)
-    return self.Changed:Connect(function(path: {any}, value: any?): ()
+    local function prune(path: {any}, old: any, new: any): ()
         if self:IsBlockedPath(path) then
             return
+        elseif typeof(old) == "table" then
+            for key, subOld in pairs(old) do
+                prune(TableUtil.Extend(path, { key }), subOld, if typeof(new) == "table" then new[key] else nil)
+            end
+        elseif new == nil or typeof(new) == "table" or not ALLOWED_TYPES[typeof(new)] then
+            set(path, nil)
         end
-        if not ALLOWED_TYPES[typeof(value)] then
-            Pretty.Debug(`skipping key of type '{typeof(value)}' for '{instance:GetFullName()}' (incompatible with attributes)`,
-                script, "ReflectTo")
-            return
-        end
-        instance:SetAttribute(self:ConstructAttribute(path), value)
+    end
+    apply({}, self)
+    return self.Changed:Connect(function(path: {any}, value: any?, old: any?): ()
+        prune(path, old, value)
+        apply(path, value)
     end)
 end
 
 -- Reflects the current values and any future changes from the given instance to this record via attributes.
 function SessionDataRecordMethods.ReflectFrom(self: SessionDataRecord, instance: Instance): RBXScriptConnection
+    local function apply(path: {any}, value: any?): ()
+        if value ~= nil then
+            for i = 1, #path - 1 do
+                local parent = { table.unpack(path, 1, i) }
+                if typeof(self:Get(parent)) ~= "table" then
+                    self:Apply(parent, {})
+                end
+            end
+        end
+        self:Apply(path, value)
+    end
     for path, value in pairs(instance:GetAttributes()) do
         if self:IsBlockedPath(path) then
             continue
         end
-        self:Apply(self:ParseAttribute(path), value)
+        apply(self:ParseAttribute(path), value)
     end
     return instance.AttributeChanged:Connect(function(name: string): ()
         if self:IsBlockedPath(name) then
@@ -134,7 +156,7 @@ function SessionDataRecordMethods.ReflectFrom(self: SessionDataRecord, instance:
         end
         local path = self:ParseAttribute(name)
         local value = instance:GetAttribute(name)
-        self:Apply(path, value)
+        apply(path, value)
     end)
 end
 
